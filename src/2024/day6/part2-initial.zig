@@ -15,12 +15,11 @@ pub fn main() !void {
     std.debug.print("Time: {d:.3} seconds", .{elapsed_s});
 }
 
-const Direction = enum(u2) { Up = 0, Left = 1, Down = 2, Right = 3 };
+const Direction = enum { Up, Left, Down, Right };
 const MovementState = struct { position: usize, direction: Direction };
 
-// Optimized version of my part 2 solution.
-// Used a boolean array instead of a hash map. Inspired by Errictho Algorithms on YouTube. 
-// Time: 300~ ms
+// Code is not efficient.
+// Time: 7~ seconds.
 fn solve(allocator: std.mem.Allocator, input: []const u8) !u32 {
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
@@ -40,38 +39,40 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u32 {
     var guard_path_state = init_state;
 
     var loop_count: u32 = 0;
-    var obstacle_positions: [130 * 130]bool = undefined;
+
+    var obstacle_positions = std.AutoHashMap(usize, void).init(allocator);
+    defer obstacle_positions.deinit();
+
+    var visited = std.AutoHashMap(MovementState, void).init(allocator);
+    defer visited.deinit();
 
     while (getNextPosition(buffer.items, guard_path_state, SIZE)) |cur| {
         // Skip if:
         // - Obstacle has been previously placed in this position or;
         // - Current position is the guard's start position
-        if (obstacle_positions[cur.position] or cur.position == init_state.position) {
+        if (obstacle_positions.contains(cur.position) or cur.position == init_state.position) {
             guard_path_state = cur;
             continue;
         }
-        var visited: [130 * 130 * 4]bool = undefined;
 
         buffer.items[cur.position] = '#';
 
         var temp_state = guard_path_state;
         while (getNextPosition(buffer.items, temp_state, SIZE)) |temp_cur| {
-            const row = temp_cur.position / SIZE;
-            const col = temp_cur.position % SIZE;
-            const dir = @intFromEnum(temp_cur.direction);
-            const hash = (row * SIZE + col) * 4 + dir;
-            if (visited[hash]) {
+            if (visited.contains(temp_cur)) {
                 loop_count += 1;
                 break;
             }
 
-            visited[hash] = true;
+            try visited.put(temp_cur, {});
             temp_state = temp_cur;
         }
 
         buffer.items[cur.position] = '.';
         guard_path_state = cur;
-        obstacle_positions[cur.position] = true;
+
+        try obstacle_positions.put(cur.position, {});
+        visited.clearAndFree();
     }
 
     return loop_count;
@@ -161,6 +162,7 @@ test "day 6 part 2" {
         \\#.........
         \\......#...
     ;
+
     const result = try solve(test_allocator, input);
 
     try std.testing.expectEqual(6, result);
@@ -173,6 +175,7 @@ test "day 6 part 2 edge case" {
         \\#^..
         \\.#..
     ;
+
     const result = try solve(test_allocator, input);
 
     try std.testing.expectEqual(1, result);
@@ -185,6 +188,8 @@ test "day 6 part 2 edge case 2" {
         \\.^#.
         \\.#..
     ;
+
+    // const allocator = std.testing.allocator;
     const result = try solve(test_allocator, input);
 
     try std.testing.expectEqual(0, result);

@@ -47,6 +47,7 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
                 // WARN: The reason for high execution times is this `allocPrint` part:
                 // const concat_str = try std.fmt.allocPrint(allocator, "{d}{d}", .{ result, num });
                 // defer allocator.free(concat_str);
+                // const concat_num = try std.fmt.parseInt(u64, concat_str, 10);
 
                 const concat_num = concatInt(result, num);
 
