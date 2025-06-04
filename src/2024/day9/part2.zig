@@ -14,9 +14,12 @@ pub fn main() !void {
     std.debug.print("Time: {d:.3} seconds", .{elapsed_s});
 }
 
+// NOTE: Not efficient, but it works.
 fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
     var blocks = std.ArrayList(i16).init(allocator);
     defer blocks.deinit();
+
+    var max_id: usize = 0;
 
     for (input, 0..) |c, i| {
         if (!std.ascii.isDigit(c)) {
@@ -30,6 +33,8 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
             for (0..num) |_| {
                 try blocks.append(@as(i16, @intCast(id)));
             }
+
+            max_id = @max(max_id, id);
             continue;
         }
 
@@ -38,45 +43,26 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
         }
     }
 
-    // TODO: Finish this, brain not working right now
-    for (0..blocks.items.len) |_| {
-        var r: usize = blocks.items.len - 1;
+    while (max_id > 0) {
+        const file = getFile(blocks.items, max_id) orelse {
+            max_id -= 1;
+            continue;
+        };
 
-        while (r > 0) {
-            std.debug.print("{d}\n", .{r});
+        const space = getBiggestFreeSpaceLeft(blocks.items, file.size, file.start_pos) orelse {
+            max_id -= 1;
+            continue;
+        };
 
-            const space = getBiggestFreeSpace(blocks.items, 0);
-            const file_size = getFileSize(blocks.items, r);
+        var r: usize = file.start_pos + file.size - 1;
+        for (space.start_pos..space.start_pos + file.size) |i| {
+            blocks.items[i] = @as(i16, @intCast(max_id));
+            blocks.items[r] = -1;
 
-            if (space.size < file_size) {
-                r -= file_size;
-
-                while (blocks.items[r] == -1) {
-                    r -= 1;
-                }
-                continue;
-            }
-
-            for (space.start_pos..space.start_pos + space.size) |i| {
-                blocks.items[i] ^= blocks.items[r];
-                blocks.items[r] ^= blocks.items[i];
-                blocks.items[i] ^= blocks.items[r];
-
-                if (r == 0) {
-                    break;
-                }
-
-                r -= 1;
-            }
-
-            while (blocks.items[r] == -1) {
-                if (r == 0) {
-                    break;
-                }
-
-                r -= 1;
-            }
+            r -= 1;
         }
+
+        max_id -= 1;
     }
 
     var sum: u64 = 0;
@@ -92,46 +78,63 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
         sum += @as(u64, @intCast(product));
     }
 
-    std.debug.print("{any}\n", .{blocks.items});
+    // std.debug.print("\n{any}\n", .{blocks.items});
 
     return sum;
 }
 
 const Space = struct { size: usize, start_pos: usize };
 
-fn getBiggestFreeSpace(blocks: []i16, position: usize) Space {
-    var space: Space = Space{ .size = 0, .start_pos = position };
+fn getBiggestFreeSpaceLeft(blocks: []i16, size: usize, end: usize) ?Space {
+    var i: usize = 0;
 
-    for (blocks[position..], position..) |_, i| {
-        if (blocks[i] >= 0) {
+    while (i < end) {
+        if (blocks[i] != -1) {
+            i += 1;
             continue;
         }
 
         var j = i;
         var count: usize = 0;
-        while (blocks[j] == -1 and j < blocks.len - 1) : (j += 1) {
+        while (j < blocks.len and blocks[j] == -1) : (j += 1) {
             count += 1;
         }
 
-        if (count > space.size) {
-            space.start_pos = i;
-            space.size = count;
+        if (count >= size) {
+            return Space{ .size = count, .start_pos = i };
+        }
+
+        i = j;
+    }
+
+    return null;
+}
+
+fn getFile(blocks: []i16, id: usize) ?Space {
+    var start_pos: ?usize = null;
+    var size: usize = 0;
+
+    for (blocks, 0..) |value, i| {
+        if (value < 0) {
+            continue;
+        }
+
+        const cur_id = @as(usize, @intCast(value));
+        if (cur_id == id) {
+            if (start_pos == null) {
+                start_pos = i;
+            }
+            size += 1;
+        } else if (start_pos != null) {
+            break;
         }
     }
 
-    return space;
-}
-
-fn getFileSize(blocks: []i16, position: usize) usize {
-    const last_block = blocks[position];
-    var cur = position;
-    var count: usize = 0;
-
-    while (blocks[cur] >= 0 and cur > 0 and blocks[cur] == last_block) : (cur -= 1) {
-        count += 1;
+    if (start_pos != null and size > 0) {
+        return Space{ .size = size, .start_pos = start_pos.? };
     }
 
-    return count;
+    return null;
 }
 
 const test_allocator = std.testing.allocator;
@@ -141,4 +144,32 @@ test solve {
     const result = try solve(test_allocator, input);
 
     try std.testing.expectEqual(2858, result);
+}
+
+test "test 2" {
+    const input = "1313165";
+    const result = try solve(test_allocator, input);
+
+    try std.testing.expectEqual(169, result);
+}
+
+test "test 3" {
+    const input = "9953877292941";
+    const result = try solve(test_allocator, input);
+
+    try std.testing.expectEqual(5768, result);
+}
+
+test "test 4" {
+    const input = "2333133121414131499";
+    const result = try solve(test_allocator, input);
+
+    try std.testing.expectEqual(6204, result);
+}
+
+test "test 5" {
+    const input = "29702";
+    const result = try solve(test_allocator, input);
+
+    try std.testing.expectEqual(59, result);
 }
