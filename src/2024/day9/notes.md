@@ -6,3 +6,8 @@ I have two major mistakes in solving part 2:
 2. I tried to find the biggest space available on the left side of the file, even if the only thing that's needed is a size that's big enough. This caused smaller files with a bigger ID move to the biggest available space.
 
 It took me a while to realize this since all of the test cases I've tried passed, but fixing those 2 issues made it work.
+
+---
+
+The solution for part 2 has now been optimized by using an array. I can get the files by using their `id` as index, and I can get the first valid space by iterating and finding the first space that has enough size for the file.
+~97% performance increase.
