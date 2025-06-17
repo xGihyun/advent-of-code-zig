@@ -61,7 +61,7 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !i64 {
     }
 
     const WIDTH: usize = grid.items[0].len;
-    const HEIGHT: usize = grid.items.len;
+    // const HEIGHT: usize = grid.items.len;
 
     if (start_col == null) {
         return 0;
@@ -77,153 +77,55 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !i64 {
 
         var temp_pos = start_pos;
         var can_move = false;
-        var has_left_box = false;
-        var has_right_box = false;
 
         var box_positions = std.ArrayList(Position).init(allocator);
         defer box_positions.deinit();
 
         switch (c) {
             '^' => {
-                while (temp_pos.row > 0) {
-                    if (grid.items[temp_pos.row][temp_pos.column] == '.') {
-                        // if (box_positions.items.len > 0) {
-                        //     if (has_right_box and !has_left_box and grid.items[temp_pos.row][temp_pos.column + 1] == '.') {
-                        //         can_move = true;
-                        //     } else if (has_left_box and !has_right_box and grid.items[temp_pos.row][temp_pos.column - 1] == '.') {
-                        //         can_move = true;
-                        //     }
-                        // } else {
-                        //     can_move = true;
-                        // }
-                        can_move = true;
-                        break;
-                    }
+                const boxes = try bfs(allocator, grid.items, temp_pos, .Up);
+                if (boxes) |b| {
+                    defer allocator.free(b);
+                    std.mem.sort(Position, b, {}, ascRow);
 
-                    if (temp_pos.column > 0 and temp_pos.column < WIDTH - 1) {
-                        const l = grid.items[temp_pos.row - 1][temp_pos.column - 1];
-                        const r = grid.items[temp_pos.row - 1][temp_pos.column + 1];
-                        // GOOD: only block on diagonal boxes outside of the push cluster
-                        const diagPosL = Position{ .row = temp_pos.row - 1, .column = temp_pos.column - 1 };
-                        const diagPosR = Position{ .row = temp_pos.row - 1, .column = temp_pos.column + 1 };
-
-                        const diagOccupiedL = (l == '[' or l == ']') and !isInList(box_positions.items, diagPosL);
-                        const diagOccupiedR = (r == '[' or r == ']') and !isInList(box_positions.items, diagPosR);
-
-                        if (diagOccupiedL or diagOccupiedR) {
-                            break;
-                        }
-                    }
-
-                    if (grid.items[temp_pos.row][temp_pos.column] == '[') {
-                        try box_positions.append(temp_pos);
-                        // try box_positions.append(Position{ .row = temp_pos.row, .column = temp_pos.column + 1 });
-                        has_right_box = true;
-                    } else if (grid.items[temp_pos.row][temp_pos.column] == ']') {
-                        try box_positions.append(temp_pos);
-                        // try box_positions.append(Position{ .row = temp_pos.row, .column = temp_pos.column - 1 });
-                        has_left_box = true;
-                    }
-
-                    if (grid.items[temp_pos.row][temp_pos.column] == '#' or
-                        (grid.items[temp_pos.row][temp_pos.column - 1] == '#' and temp_pos.column > 2 and has_left_box) or
-                        (grid.items[temp_pos.row][temp_pos.column + 1] == '#' and temp_pos.column < WIDTH - 3 and has_right_box))
-                    {
-                        break;
-                    }
-
-                    temp_pos.row -= 1;
-                }
-
-                if (start_pos.row > 0 and can_move) {
-                    while (box_positions.items.len > 0) {
-                        const top = box_positions.pop() orelse break;
-
-                        if (grid.items[top.row][top.column] == ']') {
-                            grid.items[top.row][top.column - 1] = '.';
-                            grid.items[top.row - 1][top.column] = ']';
-                            grid.items[top.row - 1][top.column - 1] = '[';
-                        } else if (grid.items[top.row][top.column] == '[') {
-                            grid.items[top.row][top.column + 1] = '.';
-                            grid.items[top.row - 1][top.column] = '[';
-                            grid.items[top.row - 1][top.column + 1] = ']';
-                        }
+                    for (b) |pos| {
+                        const ch = grid.items[pos.row][pos.column];
+                        grid.items[pos.row][pos.column] = '.';
+                        grid.items[pos.row - 1][pos.column] = ch;
                     }
 
                     grid.items[start_pos.row][start_pos.column] = '.';
                     start_pos.row -= 1;
                     grid.items[start_pos.row][start_pos.column] = '@';
+                } else {
+                    if (canMove(grid.items, start_pos, .Up)) {
+                        grid.items[start_pos.row][start_pos.column] = '.';
+                        start_pos.row -= 1;
+                        grid.items[start_pos.row][start_pos.column] = '@';
+                    }
                 }
             },
             'v' => {
-                while (temp_pos.row < HEIGHT - 1) {
-                    if (grid.items[temp_pos.row][temp_pos.column] == '.') {
-                        // if (box_positions.items.len > 0) {
-                        //     if (has_right_box and !has_left_box and grid.items[temp_pos.row][temp_pos.column + 1] == '.') {
-                        //         can_move = true;
-                        //     } else if (has_left_box and !has_right_box and grid.items[temp_pos.row][temp_pos.column - 1] == '.') {
-                        //         can_move = true;
-                        //     }
-                        // } else {
-                        //     can_move = true;
-                        // }
-                        can_move = true;
-                        break;
-                    }
+                const boxes = try bfs(allocator, grid.items, start_pos, .Down);
+                if (boxes) |b| {
+                    defer allocator.free(b);
+                    std.mem.sort(Position, b, {}, descRow);
 
-                    if (temp_pos.column > 0 and temp_pos.column < WIDTH - 1) {
-                        const l = grid.items[temp_pos.row + 1][temp_pos.column - 1];
-                        const r = grid.items[temp_pos.row + 1][temp_pos.column + 1];
-                        // GOOD: only block on diagonal boxes outside of the push cluster
-                        const diagPosL = Position{ .row = temp_pos.row + 1, .column = temp_pos.column - 1 };
-                        const diagPosR = Position{ .row = temp_pos.row + 1, .column = temp_pos.column + 1 };
-
-                        const diagOccupiedL = (l == '[' or l == ']') and !isInList(box_positions.items, diagPosL);
-                        const diagOccupiedR = (r == '[' or r == ']') and !isInList(box_positions.items, diagPosR);
-
-                        if (diagOccupiedL or diagOccupiedR) {
-                            break;
-                        }
-                    }
-
-                    if (grid.items[temp_pos.row][temp_pos.column] == '[') {
-                        try box_positions.append(temp_pos);
-                        // try box_positions.append(Position{ .row = temp_pos.row, .column = temp_pos.column + 1 });
-                        has_right_box = true;
-                    } else if (grid.items[temp_pos.row][temp_pos.column] == ']') {
-                        try box_positions.append(temp_pos);
-                        // try box_positions.append(Position{ .row = temp_pos.row, .column = temp_pos.column - 1 });
-                        has_left_box = true;
-                    }
-
-                    if (grid.items[temp_pos.row][temp_pos.column] == '#' or
-                        (grid.items[temp_pos.row][temp_pos.column - 1] == '#' and temp_pos.column > 2 and has_left_box) or
-                        (grid.items[temp_pos.row][temp_pos.column + 1] == '#' and temp_pos.column < WIDTH - 3 and has_right_box))
-                    {
-                        break;
-                    }
-
-                    temp_pos.row += 1;
-                }
-
-                if (start_pos.row < HEIGHT - 1 and can_move) {
-                    while (box_positions.items.len > 0) {
-                        const top = box_positions.pop() orelse break;
-
-                        if (grid.items[top.row][top.column] == ']') {
-                            grid.items[top.row][top.column - 1] = '.';
-                            grid.items[top.row + 1][top.column] = ']';
-                            grid.items[top.row + 1][top.column - 1] = '[';
-                        } else if (grid.items[top.row][top.column] == '[') {
-                            grid.items[top.row][top.column + 1] = '.';
-                            grid.items[top.row + 1][top.column] = '[';
-                            grid.items[top.row + 1][top.column + 1] = ']';
-                        }
+                    for (b) |pos| {
+                        const ch = grid.items[pos.row][pos.column];
+                        grid.items[pos.row][pos.column] = '.';
+                        grid.items[pos.row + 1][pos.column] = ch;
                     }
 
                     grid.items[start_pos.row][start_pos.column] = '.';
                     start_pos.row += 1;
                     grid.items[start_pos.row][start_pos.column] = '@';
+                } else {
+                    if (canMove(grid.items, start_pos, .Down)) {
+                        grid.items[start_pos.row][start_pos.column] = '.';
+                        start_pos.row += 1;
+                        grid.items[start_pos.row][start_pos.column] = '@';
+                    }
                 }
             },
             '>' => {
@@ -294,18 +196,18 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !i64 {
         }
 
         // std.debug.print("{any}\n", .{start_pos});
-        std.debug.print("{c}\n", .{c});
-        for (grid.items) |value| {
-            std.debug.print("{s}\n", .{value});
-        }
-        std.debug.print("\n", .{});
+        // std.debug.print("{c}\n", .{c});
+        // for (grid.items) |value| {
+        //     std.debug.print("{s}\n", .{value});
+        // }
+        // std.debug.print("\n", .{});
     }
 
     var sum: i64 = 0;
 
     for (grid.items, 0..) |line, row| {
         for (line, 0..) |c, col| {
-            if (c != 'O') {
+            if (c != '[') {
                 continue;
             }
 
@@ -319,13 +221,119 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !i64 {
     return sum;
 }
 
-fn isInList(list: []Position, target: Position) bool {
-    for (list) |pos| {
-        if (pos.row == target.row and pos.column == target.column) {
-            return true;
+fn descRow(_: void, a: Position, b: Position) bool {
+    return a.row > b.row;
+}
+
+fn ascRow(_: void, a: Position, b: Position) bool {
+    return a.row < b.row;
+}
+
+const Direction = enum { Up, Down };
+
+fn canMove(grid: [][]u8, pos: Position, dir: Direction) bool {
+    const DELTA_Y: i64 = if (dir == .Down) 1 else -1;
+    const width = grid[0].len;
+    const height = grid.len;
+
+    const f_row: i64 = @as(i64, @intCast(pos.row)) + DELTA_Y;
+    const f_col: i64 = @as(i64, @intCast(pos.column));
+    if (f_row <= 0 or f_col <= 1) {
+        return false;
+    }
+
+    const first_col = @as(usize, @intCast(f_col));
+    const first_row = @as(usize, @intCast(f_row));
+    if (first_row >= height - 1 or first_col >= width - 2) {
+        return false;
+    }
+
+    const first_ch = grid[first_row][first_col];
+    return first_ch == '.';
+}
+
+fn bfs(allocator: std.mem.Allocator, grid: [][]u8, start_pos: Position, direction: Direction) !?[]Position {
+    const DELTA_Y: i64 = if (direction == .Down) 1 else -1;
+    const width = grid[0].len;
+    const height = grid.len;
+
+    const f_row: i64 = @as(i64, @intCast(start_pos.row)) + DELTA_Y;
+    const f_col: i64 = @as(i64, @intCast(start_pos.column));
+    if (f_row <= 0 or f_col <= 1) {
+        return null;
+    }
+
+    const first_col = @as(usize, @intCast(f_col));
+    const first_row = @as(usize, @intCast(f_row));
+    if (first_row >= height - 1 or first_col >= width - 2) {
+        return null;
+    }
+
+    const first_ch = grid[first_row][first_col];
+    if (first_ch == '.' or first_ch == '#') {
+        return null;
+    }
+
+    var queue = std.fifo.LinearFifo(Position, .Dynamic).init(allocator);
+    defer queue.deinit();
+
+    if (first_ch == '[') {
+        try queue.writeItem(Position{ .row = first_row, .column = first_col });
+        try queue.writeItem(Position{ .row = first_row, .column = first_col + 1 });
+    } else if (first_ch == ']') {
+        try queue.writeItem(Position{ .row = first_row, .column = first_col });
+        try queue.writeItem(Position{ .row = first_row, .column = first_col - 1 });
+    }
+
+    var visited = std.AutoHashMap(Position, void).init(allocator);
+    defer visited.deinit();
+
+    while (queue.count > 0) {
+        const vertex = queue.readItem() orelse break;
+        if (visited.contains(vertex)) {
+            continue;
+        }
+
+        try visited.put(vertex, {});
+
+        const new_row: i64 = @as(i64, @intCast(vertex.row)) + DELTA_Y;
+        const new_col: i64 = @as(i64, @intCast(vertex.column));
+        if (new_row <= 0 or new_col <= 1) {
+            return null;
+        }
+
+        const next_col = @as(usize, @intCast(new_col));
+        const next_row = @as(usize, @intCast(new_row));
+        if (next_row >= height - 1 or next_col >= width - 2) {
+            return null;
+        }
+
+        const next_ch = grid[next_row][next_col];
+        if (next_ch == '#') {
+            return null;
+        }
+
+        if (next_ch == '[' or next_ch == ']') {
+            try queue.writeItem(Position{ .column = next_col, .row = next_row });
+
+            if (next_ch == '[') {
+                try queue.writeItem(Position{ .column = next_col + 1, .row = next_row });
+            } else {
+                try queue.writeItem(Position{ .column = next_col - 1, .row = next_row });
+            }
         }
     }
-    return false;
+
+    var list = std.ArrayList(Position).init(allocator);
+    defer list.deinit();
+
+    var iter = visited.keyIterator();
+    while (iter.next()) |pos| {
+        try list.append(pos.*);
+    }
+
+    const slice = try list.toOwnedSlice();
+    return slice;
 }
 
 const test_allocator = std.testing.allocator;
@@ -374,5 +382,5 @@ test "solve big input" {
     ;
     const result = try solve(test_allocator, input);
 
-    try std.testing.expectEqual(10092, result);
+    try std.testing.expectEqual(9021, result);
 }
