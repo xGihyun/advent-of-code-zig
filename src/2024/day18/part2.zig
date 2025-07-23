@@ -6,11 +6,12 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
     const result = try solve(allocator, input);
+    defer allocator.free(result);
 
     const elapsed_ns = timer.read();
     const elapsed_ms = @as(f64, @floatFromInt(elapsed_ns)) / std.time.ns_per_ms;
 
-    std.debug.print("\n{d}\n", .{result});
+    std.debug.print("\n{s}\n", .{result});
     std.debug.print("Time: {d:.3} ms", .{elapsed_ms});
 }
 
@@ -19,14 +20,13 @@ const Position = struct { x: usize, y: usize };
 const DIMENSIONS = Position{ .x = 71, .y = 71 };
 const BYTES_COUNT = 1024;
 
-fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
+fn solve(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
     var corrupted = std.ArrayList(Position).init(allocator);
     defer corrupted.deinit();
 
-    var i: usize = 0;
     var lines_iter = std.mem.splitScalar(u8, input, '\n');
     while (lines_iter.next()) |line| {
-        if (i >= BYTES_COUNT) {
+        if (line.len == 0) {
             break;
         }
 
@@ -36,25 +36,36 @@ fn solve(allocator: std.mem.Allocator, input: []const u8) !u64 {
         const position = Position{ .x = x, .y = y };
 
         try corrupted.append(position);
-
-        i += 1;
     }
 
-    const result = try bfs(allocator, corrupted.items);
-    return result;
+    var byte_idx: usize = BYTES_COUNT + 1;
+    for (corrupted.items[byte_idx..]) |_| {
+        const pos = try bfs(allocator, corrupted.items[0..byte_idx]);
+        if (pos) |p| {
+            const coord = try std.fmt.allocPrint(allocator, "{d},{d}", .{p.x, p.y});
+            return coord;
+        }
+
+        byte_idx += 1;
+    }
+
+    return "";
 }
 
 const DELTA_X = [_]i64{ 1, -1, 0, 0 };
 const DELTA_Y = [_]i64{ 0, 0, 1, -1 };
 
-fn bfs(allocator: std.mem.Allocator, corrupted: []const Position) !u64 {
+fn bfs(allocator: std.mem.Allocator, corrupted: []const Position) !?Position {
     var queue = std.fifo.LinearFifo(Position, .Dynamic).init(allocator);
     defer queue.deinit();
 
     var visited: [DIMENSIONS.x][DIMENSIONS.y]bool = undefined;
-    var steps: [DIMENSIONS.x][DIMENSIONS.y]u64 = .{.{0} ** DIMENSIONS.y} ** DIMENSIONS.x;
 
-    try queue.writeItem(Position{ .x = 0, .y = 0 });
+    var prev = std.AutoHashMap(Position, Position).init(allocator);
+    defer prev.deinit();
+
+    const start_pos = Position{ .x = 0, .y = 0 };
+    try queue.writeItem(start_pos);
 
     while (queue.count > 0) {
         const vertex = queue.readItem() orelse break;
@@ -65,7 +76,7 @@ fn bfs(allocator: std.mem.Allocator, corrupted: []const Position) !u64 {
         visited[vertex.x][vertex.y] = true;
 
         if (vertex.x == DIMENSIONS.x - 1 and vertex.y == DIMENSIONS.y - 1) {
-            return steps[vertex.x][vertex.y];
+            break;
         }
 
         for (0..4) |i| {
@@ -92,12 +103,22 @@ fn bfs(allocator: std.mem.Allocator, corrupted: []const Position) !u64 {
                 continue;
             }
 
-            steps[pos.x][pos.y] = steps[vertex.x][vertex.y] + 1;
             try queue.writeItem(pos);
+            try prev.put(pos, vertex);
         }
     }
 
-    return 0;
+    const end_pos = Position{
+        .x = DIMENSIONS.x - 1,
+        .y = DIMENSIONS.y - 1,
+    };
+
+    const prev_pos = prev.get(end_pos);
+    if (prev_pos == null) {
+        return corrupted[corrupted.len - 1];
+    }
+
+    return null;
 }
 
 fn contains(comptime T: type, slice: []const T, value: T) bool {
@@ -140,6 +161,7 @@ test solve {
         \\2,0
     ;
     const result = try solve(test_allocator, input);
+    defer test_allocator.free(result);
 
-    try std.testing.expectEqual(22, result);
+    try std.testing.expectEqualStrings("6,1", result);
 }
